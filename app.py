@@ -1,6 +1,6 @@
 # =========================================================================
 # Markowitz Portfolio Optimizer - Final Code (Ready for Streamlit Cloud)
-# Developed by Sapir Gabay | Industrial Engineering &  Management student
+# Developed by Sapir Gabay 
 # =========================================================================
 
 import streamlit as st
@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 # MANDATORY DISCLAIMER (Required for financial applications)
 # =========================================================================
 # IMPORTANT: This application and the underlying Markowitz model 
-# implementation are for **academic and demonstrative purposes only**. 
+# implementation is for **academic and demonstrative purposes only**. 
 # 
 # This analysis:
 # 1. Does not constitute financial advice, investment recommendations, 
@@ -28,7 +28,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # MARKOWITZ CORE FUNCTIONS (Based on Modern Portfolio Theory)
 # =========================================================================
-ANNUALIZATION_FACTOR = 12 #12 (monthly)
+ANNUALIZATION_FACTOR = 12 # Changed from 252 (daily) to 12 (monthly)
 
 def calculate_portfolio_performance(weights, mean_returns, cov_matrix):
     """ Calculates annualized return (μ) and risk (σ) for the portfolio. """
@@ -59,7 +59,7 @@ def minimize_volatility(mean_returns, cov_matrix, constraints, num_assets):
     )
     return optimal_weights.x
 
-def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets, num_portfolios=100):
+def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets, num_portfolios=10000):
     """ Simulates many portfolios to plot the Efficient Frontier. """
     results = np.zeros((3, num_portfolios))
     
@@ -83,6 +83,7 @@ def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets
 def get_data(tickers, start_date, end_date):
     """ Caches yfinance data to prevent repeated slow downloads. """
     # Using interval='1mo' to pull monthly data, which is more robust against missing daily values.
+    # The default auto_adjust=True is now standard in yfinance
     return yf.download(tickers, start=start_date, end=end_date, interval='1mo')['Adj Close']
 
 st.set_page_config(layout="wide")
@@ -101,7 +102,7 @@ st.sidebar.header("1. Asset Selection")
 # Input for stock tickers
 ticker_input = st.sidebar.text_area(
     "Enter Stock Tickers, separated by commas (e.g., AAPL, MSFT, GOOG, JPM)", 
-    "AAPL, MSFT, GOOG, JPM"
+    "MSFT, VOO" # Using a highly liquid ETF and stock as the default to ensure success
 )
 
 # Input for date range
@@ -121,17 +122,16 @@ if st.sidebar.button("Run Optimization"):
             with st.spinner('Pulling historical data and running 10,000 simulations...'):
                 
                 # --- DATA ACQUISITION & CALCULATION ---
-                # Changed to use the cached function
                 data = get_data(tickers, start_date, end_date)
                 
                 # CRITICAL ROBUSTNESS CHECK: Check if data was retrieved successfully
-                if data.empty or data.shape[1] < 2:
-                    st.error("Error: Could not retrieve data for all tickers or data is insufficient. Please check ticker symbols and date range.")
+                if data.empty or data.shape[1] != num_assets:
+                    st.error("Error: Could not retrieve data for all tickers or data is insufficient. Please check ticker symbols.")
                     st.stop() # Stop execution gracefully
 
                 returns = data.pct_change().dropna()
 
-                # Second check: Ensure no missing daily returns after dropna
+                # Second check: Ensure sufficient common data points for correlation calculation.
                 if returns.empty or returns.shape[1] < 2:
                     st.error("Error: Insufficient common data points for correlation calculation. Try a different date range or different tickers.")
                     st.stop()
