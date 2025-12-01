@@ -1,6 +1,6 @@
 # =========================================================================
 # Markowitz Portfolio Optimizer - Final Code (Ready for Streamlit Cloud)
-# Developed by Sapir Gabay | Industrial Engineering & Intelligent Systems
+# Developed by Sapir Gabay | Industrial Engineering & Management student
 # =========================================================================
 
 import streamlit as st
@@ -28,15 +28,16 @@ import plotly.graph_objects as go
 # =========================================================================
 # MARKOWITZ CORE FUNCTIONS (Based on Modern Portfolio Theory)
 # =========================================================================
+ANNUALIZATION_FACTOR = 12 # Changed from 252 (daily) to 12 (monthly)
 
 def calculate_portfolio_performance(weights, mean_returns, cov_matrix):
     """ Calculates annualized return (μ) and risk (σ) for the portfolio. """
     
     # Annualized Return (μ)
-    returns = np.sum(mean_returns * weights) * 252 
+    returns = np.sum(mean_returns * weights) * ANNUALIZATION_FACTOR
     
     # Annualized Volatility (σ) (The core Markowitz formula)
-    std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+    std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(ANNUALIZATION_FACTOR)
     return std_dev, returns
 
 def minimize_volatility(mean_returns, cov_matrix, constraints, num_assets):
@@ -81,7 +82,8 @@ def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets
 @st.cache_data
 def get_data(tickers, start_date, end_date):
     """ Caches yfinance data to prevent repeated slow downloads. """
-    return yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+    # Using interval='1mo' to pull monthly data, which is more robust against missing daily values.
+    return yf.download(tickers, start=start_date, end=end_date, interval='1mo')['Adj Close']
 
 st.set_page_config(layout="wide")
 st.title("🛡️ Markowitz Portfolio Optimizer: Risk Minimization Model")
