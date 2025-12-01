@@ -156,16 +156,17 @@ if st.sidebar.button("Run Optimization"):
                             size=5
                         ),
                         name='Simulated Portfolios'
-                    ),
-                    # Mark the Minimum Risk Portfolio
-                    go.Scatter(
-                        x=[std_min], 
-                        y=[ret_min], 
-                        mode='markers',
-                        marker=dict(color='green', size=15, symbol='star'),
-                        name='Global Minimum Variance Portfolio (GMVP)'
                     )
                 ])
+
+                # Add the Minimum Risk Portfolio marker
+                fig.add_trace(go.Scatter(
+                    x=[std_min], 
+                    y=[ret_min], 
+                    mode='markers',
+                    marker=dict(color='green', size=15, symbol='star'),
+                    name='Global Minimum Variance Portfolio (GMVP)'
+                ))
 
                 fig.update_layout(
                     title="Markowitz Efficient Frontier",
