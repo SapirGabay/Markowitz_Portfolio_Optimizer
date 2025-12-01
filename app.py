@@ -28,7 +28,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # MARKOWITZ CORE FUNCTIONS (Based on Modern Portfolio Theory)
 # =========================================================================
-ANNUALIZATION_FACTOR = 12 # Changed from 252 (daily) to 12 (monthly)
+ANNUALIZATION_FACTOR = 12 #12 (monthly)
 
 def calculate_portfolio_performance(weights, mean_returns, cov_matrix):
     """ Calculates annualized return (μ) and risk (σ) for the portfolio. """
@@ -59,7 +59,7 @@ def minimize_volatility(mean_returns, cov_matrix, constraints, num_assets):
     )
     return optimal_weights.x
 
-def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets, num_portfolios=10000):
+def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets, num_portfolios=100):
     """ Simulates many portfolios to plot the Efficient Frontier. """
     results = np.zeros((3, num_portfolios))
     
