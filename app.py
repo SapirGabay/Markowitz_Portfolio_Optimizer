@@ -1,5 +1,5 @@
 # =========================================================================
-# Markowitz Portfolio Optimizer - Streamlit App (Stable & Optimized)
+# Markowitz Portfolio Optimizer - Streamlit App (GMVP + Max Sharpe + Equal Weight)
 # Developed by Sapir Gabay | Industrial Engineering & Intelligent Systems
 # =========================================================================
 
@@ -61,7 +61,34 @@ def minimize_volatility(mean_returns, cov_matrix, constraints, num_assets):
     )
 
     if not result.success:
-        raise ValueError(f"Optimization failed: {result.message}")
+        raise ValueError(f"Optimization failed (GMVP): {result.message}")
+
+    return result.x
+
+
+def maximize_sharpe(mean_returns, cov_matrix, constraints, num_assets, risk_free_rate):
+    """Find Maximum Sharpe Ratio portfolio (long-only)."""
+
+    initial_weights = np.array(num_assets * [1.0 / num_assets], dtype=float)
+
+    def negative_sharpe(weights):
+        std_dev, ret = calculate_portfolio_performance(weights, mean_returns, cov_matrix)
+        # Annualized Sharpe with annual risk-free rate
+        if std_dev == 0:
+            return 1e6
+        sharpe = (ret - risk_free_rate) / std_dev
+        return -sharpe  # minimize negative Sharpe → maximize Sharpe
+
+    result = minimize(
+        negative_sharpe,
+        initial_weights,
+        method="SLSQP",
+        bounds=tuple([(0, 1)] * num_assets),
+        constraints=constraints,
+    )
+
+    if not result.success:
+        raise ValueError(f"Optimization failed (Max Sharpe): {result.message}")
 
     return result.x
 
@@ -86,7 +113,7 @@ def generate_random_portfolios(mean_returns, cov_matrix, num_assets, num_portfol
     monthly_vars = np.einsum("ij,jk,ik->i", weights, cov_mat, weights)
     std_devs = np.sqrt(monthly_vars * ANNUALIZATION_FACTOR)
 
-    # Sharpe (rf = 0), handle std_dev = 0
+    # Sharpe (rf = 0) עבור סימולציות
     sharpe_ratios = np.divide(
         annual_returns,
         std_devs,
@@ -141,12 +168,15 @@ def get_data(tickers, start_date, end_date):
 
 st.set_page_config(layout="wide")
 
-st.title("🛡️ Markowitz Portfolio Optimizer: Risk Minimization Model")
+st.title("🛡️ Markowitz Portfolio Optimizer")
 st.markdown("---")
 st.markdown(
     """
     This app implements core **Markowitz Portfolio Theory** to compute the **Efficient Frontier**
-    and the **Global Minimum Variance Portfolio (GMVP)** based on historical data.
+    and three key portfolios:
+    - **GMVP** (Global Minimum Variance Portfolio)
+    - **Max Sharpe** (Maximum Sharpe Ratio)
+    - **Equal Weight** baseline
     """
 )
 st.markdown("---")
@@ -161,6 +191,16 @@ ticker_input = st.sidebar.text_area(
 
 start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2022-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
+
+st.sidebar.header("2. Sharpe Settings")
+risk_free_rate = st.sidebar.number_input(
+    "Risk-free annual rate (for Sharpe)",
+    min_value=0.0,
+    max_value=0.20,
+    value=0.02,
+    step=0.005,
+    format="%.3f",
+)
 
 tickers = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
 num_assets = len(tickers)
@@ -221,16 +261,37 @@ if st.sidebar.button("Run Optimization"):
                 constraints = {"type": "eq", "fun": lambda x: np.sum(x) - 1.0}
 
                 # ----- OPTIMIZATION -----
-                weights_min_risk = minimize_volatility(
+                # GMVP
+                weights_gmvp = minimize_volatility(
                     mean_returns, cov_matrix, constraints, len(actual_tickers)
                 )
+                if not np.allclose(np.sum(weights_gmvp), 1.0, atol=1e-5):
+                    raise ValueError("GMVP: weights do not sum to 1.")
 
-                if not np.allclose(np.sum(weights_min_risk), 1.0, atol=1e-5):
-                    raise ValueError("Optimization failed to find valid weights (sum != 1).")
-
-                std_min, ret_min = calculate_portfolio_performance(
-                    weights_min_risk, mean_returns, cov_matrix
+                std_gmvp, ret_gmvp = calculate_portfolio_performance(
+                    weights_gmvp, mean_returns, cov_matrix
                 )
+
+                # Equal Weight portfolio
+                weights_eq = np.array(len(actual_tickers) * [1.0 / len(actual_tickers)])
+                std_eq, ret_eq = calculate_portfolio_performance(
+                    weights_eq, mean_returns, cov_matrix
+                )
+
+                # Max Sharpe portfolio
+                weights_ms = maximize_sharpe(
+                    mean_returns, cov_matrix, constraints, len(actual_tickers), risk_free_rate
+                )
+                if not np.allclose(np.sum(weights_ms), 1.0, atol=1e-5):
+                    raise ValueError("Max Sharpe: weights do not sum to 1.")
+
+                std_ms, ret_ms = calculate_portfolio_performance(
+                    weights_ms, mean_returns, cov_matrix
+                )
+
+                sharpe_gmvp = 0.0 if std_gmvp == 0 else (ret_gmvp - risk_free_rate) / std_gmvp
+                sharpe_eq = 0.0 if std_eq == 0 else (ret_eq - risk_free_rate) / std_eq
+                sharpe_ms = 0.0 if std_ms == 0 else (ret_ms - risk_free_rate) / std_ms
 
                 # ----- SIMULATIONS -----
                 results = generate_random_portfolios(
@@ -241,11 +302,10 @@ if st.sidebar.button("Run Optimization"):
                 st.header("Results and Efficient Frontier")
 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("Optimal Annualized Return (μ)", f"{ret_min * 100:.2f}%")
-                col2.metric("Minimum Annualized Volatility (σ)", f"{std_min * 100:.2f}%")
-
-                sharpe_min = 0.0 if std_min == 0 else ret_min / std_min
-                col3.metric("Sharpe Ratio (Min Risk)", f"{sharpe_min:.2f}")
+                col1.metric("GMVP Annualized Return (μ)", f"{ret_gmvp * 100:.2f}%")
+                col2.metric("GMVP Annualized Volatility (σ)", f"{std_gmvp * 100:.2f}%")
+                col3.metric("GMVP Sharpe (rf = {:.1f}%)".format(risk_free_rate * 100),
+                            f"{sharpe_gmvp:.2f}")
 
                 # Efficient Frontier plot
                 fig = go.Figure(
@@ -256,7 +316,7 @@ if st.sidebar.button("Run Optimization"):
                             mode="markers",
                             marker=dict(
                                 color=results[2, :],
-                                colorbar=dict(title="Sharpe Ratio"),
+                                colorbar=dict(title="Sharpe Ratio (rf=0)"),
                                 colorscale="RdYlBu",
                                 showscale=True,
                                 size=5,
@@ -266,13 +326,36 @@ if st.sidebar.button("Run Optimization"):
                     ]
                 )
 
+                # GMVP
                 fig.add_trace(
                     go.Scatter(
-                        x=[std_min],
-                        y=[ret_min],
+                        x=[std_gmvp],
+                        y=[ret_gmvp],
                         mode="markers",
-                        marker=dict(color="green", size=15, symbol="star"),
-                        name="Global Minimum Variance Portfolio (GMVP)",
+                        marker=dict(color="green", size=14, symbol="star"),
+                        name="GMVP (Min Volatility)",
+                    )
+                )
+
+                # Max Sharpe
+                fig.add_trace(
+                    go.Scatter(
+                        x=[std_ms],
+                        y=[ret_ms],
+                        mode="markers",
+                        marker=dict(color="orange", size=12, symbol="triangle-up"),
+                        name="Max Sharpe",
+                    )
+                )
+
+                # Equal Weight
+                fig.add_trace(
+                    go.Scatter(
+                        x=[std_eq],
+                        y=[ret_eq],
+                        mode="markers",
+                        marker=dict(color="black", size=10, symbol="x"),
+                        name="Equal Weight",
                     )
                 )
 
@@ -286,16 +369,68 @@ if st.sidebar.button("Run Optimization"):
 
                 st.plotly_chart(fig, use_container_width=True)
 
-                # Weights table
-                st.subheader("Optimal Asset Allocation (GMVP)")
-                weights_df = pd.DataFrame(
+                # ----- COMPARISON TABLE -----
+                st.subheader("Portfolio Comparison")
+                comparison_df = pd.DataFrame(
+                    {
+                        "Portfolio": ["GMVP (Min Vol)", "Max Sharpe", "Equal Weight"],
+                        "Annual Return (μ)": [
+                            f"{ret_gmvp * 100:.2f}%",
+                            f"{ret_ms * 100:.2f}%",
+                            f"{ret_eq * 100:.2f}%",
+                        ],
+                        "Annual Volatility (σ)": [
+                            f"{std_gmvp * 100:.2f}%",
+                            f"{std_ms * 100:.2f}%",
+                            f"{std_eq * 100:.2f}%",
+                        ],
+                        f"Sharpe (rf={risk_free_rate*100:.1f}%)": [
+                            f"{sharpe_gmvp:.2f}",
+                            f"{sharpe_ms:.2f}",
+                            f"{sharpe_eq:.2f}",
+                        ],
+                    }
+                )
+                st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+                # ----- ASSET ALLOCATIONS -----
+                st.subheader("Optimal Asset Allocations")
+
+                st.markdown("**GMVP (Global Minimum Variance Portfolio)**")
+                gmvp_df = pd.DataFrame(
                     {
                         "Asset": actual_tickers,
-                        "Optimal Weight": [f"{w * 100:.2f}%" for w in weights_min_risk],
+                        "Weight": [f"{w * 100:.2f}%" for w in weights_gmvp],
                     }
                 )
                 st.dataframe(
-                    weights_df.sort_values(by="Optimal Weight", ascending=False),
+                    gmvp_df.sort_values(by="Weight", ascending=False),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.markdown("**Max Sharpe Portfolio**")
+                ms_df = pd.DataFrame(
+                    {
+                        "Asset": actual_tickers,
+                        "Weight": [f"{w * 100:.2f}%" for w in weights_ms],
+                    }
+                )
+                st.dataframe(
+                    ms_df.sort_values(by="Weight", ascending=False),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.markdown("**Equal Weight Portfolio**")
+                eq_df = pd.DataFrame(
+                    {
+                        "Asset": actual_tickers,
+                        "Weight": [f"{w * 100:.2f}%" for w in weights_eq],
+                    }
+                )
+                st.dataframe(
+                    eq_df,
                     use_container_width=True,
                     hide_index=True,
                 )
