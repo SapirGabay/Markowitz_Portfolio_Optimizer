@@ -179,7 +179,7 @@ st.markdown(
     - **Max Sharpe** – Portfolio with the highest risk-adjusted return
     - **Equal Weight** – Simple 1/N benchmark
 
-    Developed by **Sapir Gabay** | Industrial Engineering & Intelligent Systems.
+    Developed by **Sapir Gabay** | Industrial Engineering & Management student.
     """
 )
 st.markdown(
