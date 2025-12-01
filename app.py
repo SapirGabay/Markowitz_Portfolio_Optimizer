@@ -78,6 +78,11 @@ def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets
 # STREAMLIT UI & APPLICATION LOGIC
 # =========================================================================
 
+@st.cache_data
+def get_data(tickers, start_date, end_date):
+    """ Caches yfinance data to prevent repeated slow downloads. """
+    return yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+
 st.set_page_config(layout="wide")
 st.title("🛡️ Markowitz Portfolio Optimizer: Risk Minimization Model")
 st.markdown("---")
@@ -113,9 +118,21 @@ if st.sidebar.button("Run Optimization"):
             with st.spinner('Pulling historical data and running 10,000 simulations...'):
                 
                 # --- DATA ACQUISITION & CALCULATION ---
-                data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+                # Changed to use the cached function
+                data = get_data(tickers, start_date, end_date)
                 
+                # CRITICAL ROBUSTNESS CHECK: Check if data was retrieved successfully
+                if data.empty or data.shape[1] < 2:
+                    st.error("Error: Could not retrieve data for all tickers or data is insufficient. Please check ticker symbols and date range.")
+                    st.stop() # Stop execution gracefully
+
                 returns = data.pct_change().dropna()
+
+                # Second check: Ensure no missing daily returns after dropna
+                if returns.empty or returns.shape[1] < 2:
+                    st.error("Error: Insufficient common data points for correlation calculation. Try a different date range or different tickers.")
+                    st.stop()
+                
                 mean_returns = returns.mean()
                 cov_matrix = returns.cov()
                 
