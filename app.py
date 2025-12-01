@@ -1,6 +1,6 @@
 # =========================================================================
 # Markowitz Portfolio Optimizer - Final Code (Ready for Streamlit Cloud)
-# Developed by Sapir Gabay | Industrial Engineering & Management student
+# Developed by Sapir Gabay | Industrial Engineering &  Management student
 # =========================================================================
 
 import streamlit as st
@@ -105,7 +105,8 @@ ticker_input = st.sidebar.text_area(
 )
 
 # Input for date range
-start_date = st.sidebar.date_input("Start Date", pd.to_datetime('2020-01-01'))
+# CRITICAL FIX: Changing default start date to a more recent date to ensure data availability
+start_date = st.sidebar.date_input("Start Date", pd.to_datetime('2022-01-01')) 
 end_date = st.sidebar.date_input("End Date", pd.to_datetime('today'))
 
 
