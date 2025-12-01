@@ -1,6 +1,6 @@
 # =========================================================================
 # Markowitz Portfolio Optimizer - Final Code (Ready for Streamlit Cloud)
-# Developed by Sapir Gabay
+# Developed by Sapir Gabay | Industrial Engineering & Intelligent Systems
 # =========================================================================
 
 import streamlit as st
@@ -9,6 +9,7 @@ import pandas as pd
 import yfinance as yf
 from scipy.optimize import minimize
 import plotly.graph_objects as go
+from numpy.linalg import LinAlgError # יבוא שנוסף כדי לטפל בשגיאות מטריצה
 
 # =========================================================================
 # MANDATORY DISCLAIMER (Required for financial applications)
@@ -95,15 +96,14 @@ def get_data(tickers, start_date, end_date):
     # Check if 'Adj Close' exists (handles single vs multiple tickers)
     if 'Adj Close' in raw_data.columns:
         price_data = raw_data['Adj Close']
-    elif isinstance(raw_data, pd.DataFrame):
+    elif isinstance(raw_data, pd.DataFrame) and 'Adj Close' in raw_data.columns:
          # If single ticker, yfinance returns a single DataFrame, we take 'Adj Close'
          price_data = raw_data['Adj Close']
     else:
-        # Fallback if structure is unexpected (should not happen with multiple tickers)
-        raise ValueError("Data retrieval error: 'Adj Close' column not found.")
+        # If the data structure is not what we expect, raise an error that will be caught by the main try/except
+        raise ValueError("Data retrieval error: Incomplete 'Adj Close' data.")
 
     # 2. CRITICAL FIX from class: Ensure data points are sampled at month end (ME)
-    # This prevents issues with missing end-of-month data that breaks time series analysis.
     price_data_monthly = price_data.resample('ME').last()
     
     # Remove any NaN rows resulting from the resample (usually only the last row if market is open)
@@ -126,11 +126,11 @@ st.sidebar.header("1. Asset Selection")
 # Input for stock tickers
 ticker_input = st.sidebar.text_area(
     "Enter Stock Tickers, separated by commas (e.g., AAPL, MSFT, GOOG, JPM)", 
-    "AAPL, SPY" # Using a highly liquid ETF and stock as the default to ensure success
+    "GLD, MSFT" # Using a highly liquid ETF and stock as the default to ensure success
 )
 
 # Input for date range
-# CRITICAL FIX: Changing default start date to a more recent date to ensure data availability
+# CRITICAL FIX: Changing default start date to a wider, but stable range.
 start_date = st.sidebar.date_input("Start Date", pd.to_datetime('2022-01-01')) 
 end_date = st.sidebar.date_input("End Date", pd.to_datetime('today'))
 
@@ -168,6 +168,14 @@ if st.sidebar.button("Run Optimization"):
 
                 mean_returns = returns.mean()
                 cov_matrix = returns.cov()
+                
+                # CRITICAL LINE: Check if Covariance Matrix is mathematically sound before optimization
+                try:
+                    np.linalg.inv(cov_matrix)
+                except LinAlgError:
+                    st.error("Error: Covariance Matrix is singular. Choose assets with less correlation or a different date range.")
+                    st.stop()
+                
                 
                 # Constraints: Sum of weights must equal 1
                 constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1}) 
@@ -246,4 +254,5 @@ if st.sidebar.button("Run Optimization"):
                 st.dataframe(weights_df.sort_values(by='Optimal Weight', ascending=False), use_container_width=True, hide_index=True)
                 
         except Exception as e:
-            st.error(f"An unexpected error occurred during calculation. Please check your ticker symbols or data range. Error: {e}")
+            # Displays a clear message to the user instead of cryptic error
+            st.error(f"Optimization Failed. Please change the date range or ticker symbols. Error Details: {e}")
