@@ -174,13 +174,24 @@ st.markdown(
     """
     This app implements core **Markowitz Portfolio Theory** to compute the **Efficient Frontier**
     and three key portfolios:
-    - **GMVP** (Global Minimum Variance Portfolio)
-    - **Max Sharpe** (Maximum Sharpe Ratio)
-    - **Equal Weight** baseline
+
+    - **GMVP** – Global Minimum Variance Portfolio (minimum risk)
+    - **Max Sharpe** – Portfolio with the highest risk-adjusted return
+    - **Equal Weight** – Simple 1/N benchmark
+
+    Developed by **Sapir Gabay** | Industrial Engineering & Intelligent Systems.
+    """
+)
+st.markdown(
+    """
+    **How to use:**
+    1. Enter **2–10 tickers** (stocks / ETFs) separated by commas (e.g., `GLD, QQQ, TLT`).
+    2. Choose a **date range** (3–5 years is usually a good starting point).
+    3. Set the **risk-free annual rate** for the Sharpe ratio (e.g., `0.02` = 2% per year), or keep the default.
+    4. Click **Run Optimization** to see the Efficient Frontier and the three portfolios.
     """
 )
 st.markdown("---")
-
 # Sidebar inputs
 st.sidebar.header("1. Asset Selection")
 
