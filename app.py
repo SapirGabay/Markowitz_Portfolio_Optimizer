@@ -1,6 +1,6 @@
 # =========================================================================
 # Markowitz Portfolio Optimizer - Final Code (Ready for Streamlit Cloud)
-# Developed by Sapir Gabay 
+# Developed by Sapir Gabay
 # =========================================================================
 
 import streamlit as st
@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 # MANDATORY DISCLAIMER (Required for financial applications)
 # =========================================================================
 # IMPORTANT: This application and the underlying Markowitz model 
-# implementation is for **academic and demonstrative purposes only**. 
+# implementation are for **academic and demonstrative purposes only**. 
 # 
 # This analysis:
 # 1. Does not constitute financial advice, investment recommendations, 
@@ -69,9 +69,15 @@ def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets
         
         std_dev, returns = calculate_portfolio_performance(weights, mean_returns, cov_matrix)
         
+        # Ensure non-zero standard deviation for Sharpe Ratio calculation
+        if std_dev == 0:
+            sharpe_ratio = 0
+        else:
+            sharpe_ratio = returns / std_dev
+        
         results[0,i] = std_dev
         results[1,i] = returns
-        results[2,i] = returns / std_dev # Sharpe Ratio
+        results[2,i] = sharpe_ratio
         
     return results
 
@@ -81,10 +87,28 @@ def generate_random_portfolios(mean_returns, cov_matrix, constraints, num_assets
 
 @st.cache_data
 def get_data(tickers, start_date, end_date):
-    """ Caches yfinance data to prevent repeated slow downloads. """
-    # Using interval='1mo' to pull monthly data, which is more robust against missing daily values.
-    # The default auto_adjust=True is now standard in yfinance
-    return yf.download(tickers, start=start_date, end=end_date, interval='1mo')['Adj Close']
+    """ Caches yfinance data to prevent repeated slow downloads and ensures monthly resampling. """
+    
+    # 1. Pull data (Monthly interval for robustness)
+    raw_data = yf.download(tickers, start=start_date, end=end_date, interval='1mo')
+    
+    # Check if 'Adj Close' exists (handles single vs multiple tickers)
+    if 'Adj Close' in raw_data.columns:
+        price_data = raw_data['Adj Close']
+    elif isinstance(raw_data, pd.DataFrame):
+         # If single ticker, yfinance returns a single DataFrame, we take 'Adj Close'
+         price_data = raw_data['Adj Close']
+    else:
+        # Fallback if structure is unexpected (should not happen with multiple tickers)
+        raise ValueError("Data retrieval error: 'Adj Close' column not found.")
+
+    # 2. CRITICAL FIX from class: Ensure data points are sampled at month end (ME)
+    # This prevents issues with missing end-of-month data that breaks time series analysis.
+    price_data_monthly = price_data.resample('ME').last()
+    
+    # Remove any NaN rows resulting from the resample (usually only the last row if market is open)
+    return price_data_monthly.dropna()
+
 
 st.set_page_config(layout="wide")
 st.title("🛡️ Markowitz Portfolio Optimizer: Risk Minimization Model")
@@ -102,7 +126,7 @@ st.sidebar.header("1. Asset Selection")
 # Input for stock tickers
 ticker_input = st.sidebar.text_area(
     "Enter Stock Tickers, separated by commas (e.g., AAPL, MSFT, GOOG, JPM)", 
-    "MSFT, VOO" # Using a highly liquid ETF and stock as the default to ensure success
+    "AAPL, SPY" # Using a highly liquid ETF and stock as the default to ensure success
 )
 
 # Input for date range
@@ -136,6 +160,12 @@ if st.sidebar.button("Run Optimization"):
                     st.error("Error: Insufficient common data points for correlation calculation. Try a different date range or different tickers.")
                     st.stop()
                 
+                # Third check: Check for perfect correlation (causes singular matrix)
+                if returns.corr().abs().max().max() >= 0.999: 
+                    st.error("Error: Assets are perfectly correlated. Optimization cannot be performed. Choose less correlated assets.")
+                    st.stop()
+
+
                 mean_returns = returns.mean()
                 cov_matrix = returns.cov()
                 
@@ -146,6 +176,12 @@ if st.sidebar.button("Run Optimization"):
                 
                 # 1. Calculate Minimum Risk Portfolio (Optimization)
                 weights_min_risk = minimize_volatility(mean_returns, cov_matrix, constraints, num_assets)
+                
+                # Check for optimization success
+                if not np.allclose(np.sum(weights_min_risk), 1.0, atol=1e-5):
+                     raise ValueError("Optimization failed to find valid weights.")
+                
+
                 std_min, ret_min = calculate_portfolio_performance(weights_min_risk, mean_returns, cov_matrix)
                 
                 # 2. Simulate Random Portfolios (for the Efficient Frontier plot)
